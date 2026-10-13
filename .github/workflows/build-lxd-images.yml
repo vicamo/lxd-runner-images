@@ -15,9 +15,30 @@ defaults:
     shell: bash
 
 jobs:
+  # What the runner type of the build can do, e.g. hosted arm64 runners have no
+  # /dev/kvm and can't run virtual machines.
+  capabilities:
+    runs-on: ${{ endsWith(inputs.image_type, '-arm64') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    outputs:
+      instance_types: ${{ steps.kvm.outputs.instance_types }}
+    steps:
+      - name: Detect KVM
+        id: kvm
+        run: |
+          if [[ -c /dev/kvm ]]; then
+            echo 'instance_types=["container", "vm"]'
+          else
+            echo 'instance_types=["container"]'
+          fi | tee -a "${GITHUB_OUTPUT}"
+
   build:
+    needs: capabilities
     runs-on: ${{ endsWith(inputs.image_type, '-arm64') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        instance_type: ${{ fromJSON(needs.capabilities.outputs.instance_types) }}
     env:
       image_type: ${{ inputs.image_type }}
     steps:
@@ -107,6 +128,13 @@ jobs:
           lxc storage volume create default images
           lxc config set storage.images_volume default/images
 
+      # A virtual machine gets 1 CPU, 1 GiB of memory and a 10 GiB disk by default.
+      - name: Size virtual machines
+        if: matrix.instance_type == 'vm'
+        run: |
+          lxc profile set default limits.cpu="$(nproc)" limits.memory=12GiB
+          lxc profile device set default root size=75GiB
+
       - name: Setup Packer
         uses: hashicorp/setup-packer@v3.4.0
         with:
@@ -123,4 +151,5 @@ jobs:
           Import-Module ./helpers/GenerateResourcesAndImage.ps1
           GenerateResourcesAndImage `
             -ImageType ($env:image_type -replace '-arm64$', '_Arm64') `
+            -InstanceType ${{ matrix.instance_type }} `
             -OnError cleanup
