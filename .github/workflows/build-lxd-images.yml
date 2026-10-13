@@ -66,6 +66,10 @@ jobs:
           sudo mount /dev/vgmerged/lvmerged /merged
           df -h /merged
 
+      # LXD does not create the source of a dir pool.
+      - name: Create LXD pool directory
+        run: sudo mkdir /merged/lxd
+
       # The action is in alpha, hence the pinned commit.
       - name: Setup LXD
         uses: canonical/setup-lxd@e3ef25fc529b40aa403b264cdf44e7882b361164
