@@ -153,3 +153,19 @@ jobs:
             -ImageType ($env:image_type -replace '-arm64$', '_Arm64') `
             -InstanceType ${{ matrix.instance_type }} `
             -OnError cleanup
+
+      - name: Show the software report
+        id: report
+        run: |
+          readme=${image_type^}
+          readme=images/ubuntu/${readme/-arm64/-Arm64}-Readme.md
+          echo "readme=${readme}" | tee -a "${GITHUB_OUTPUT}"
+          cat "${readme}" >> "${GITHUB_STEP_SUMMARY}"
+
+      - name: Upload generated reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-${{ inputs.image_type }}-${{ matrix.instance_type }}
+          path: |
+            ${{ steps.report.outputs.readme }}
+            images/ubuntu/software-report.json
