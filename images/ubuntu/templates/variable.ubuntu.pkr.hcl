@@ -23,3 +23,8 @@ variable "installer_script_folder" {
   type    = string
   default = "/imagegeneration/installers"
 }
+variable "github_token" {
+  type      = string
+  default   = ""
+  sensitive = true
+}
