@@ -1,15 +1,20 @@
 build {
-  sources = ["source.azure-arm.image"]
+  sources = ["source.lxd.container", "source.lxd.vm"]
   name = "ubuntu-24_04-arm64"
 
   provisioner "shell" {
     execute_command = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
-    inline          = ["mkdir ${var.image_folder}", "chmod 777 ${var.image_folder}"]
+    script          = "${path.root}/../scripts/build/configure-packer-user.sh"
+  }
+
+  provisioner "shell" {
+    execute_command = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
+    inline          = ["mkdir ${var.image_folder} ${var.helper_script_folder} ${var.installer_script_folder}", "chmod 777 ${var.image_folder} ${var.helper_script_folder} ${var.installer_script_folder}"]
   }
 
   provisioner "file" {
     destination = "${var.helper_script_folder}"
-    source      = "${path.root}/../scripts/helpers"
+    source      = "${path.root}/../scripts/helpers/"
   }
 
   provisioner "shell" {
@@ -21,9 +26,9 @@ build {
     environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}","DEBIAN_FRONTEND=noninteractive"]
     execute_command  = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     scripts          = [
-      "${path.root}/../scripts/build/install-ms-repos.sh",
       "${path.root}/../scripts/build/configure-apt-sources.sh",
-      "${path.root}/../scripts/build/configure-apt.sh"
+      "${path.root}/../scripts/build/configure-apt.sh",
+      "${path.root}/../scripts/build/install-ms-repos.sh"
     ]
   }
 
@@ -34,7 +39,7 @@ build {
 
   provisioner "file" {
     destination = "${var.installer_script_folder}"
-    source      = "${path.root}/../scripts/build"
+    source      = "${path.root}/../scripts/build/"
   }
 
   provisioner "file" {
@@ -60,7 +65,8 @@ build {
     execute_command = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     inline          = [
       "mv ${var.image_folder}/docs-gen ${var.image_folder}/SoftwareReport",
-      "mv ${var.image_folder}/post-gen ${var.image_folder}/post-generation"
+      "mv ${var.image_folder}/post-gen ${var.image_folder}/post-generation",
+      "chmod 644 ${var.installer_script_folder}/toolset.json"
     ]
   }
 
@@ -77,7 +83,7 @@ build {
   }
 
   provisioner "shell" {
-    environment_vars = ["DEBIAN_FRONTEND=noninteractive", "HELPER_SCRIPTS=${var.helper_script_folder}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}"]
+    environment_vars = ["DEBIAN_FRONTEND=noninteractive", "HELPER_SCRIPTS=${var.helper_script_folder}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}", "GITHUB_TOKEN=${var.github_token}"]
     execute_command  = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     scripts          = ["${path.root}/../scripts/build/install-apt-vital.sh"]
   }
@@ -95,7 +101,7 @@ provisioner "shell" {
   }
 
   provisioner "shell" {
-    environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}", "DEBIAN_FRONTEND=noninteractive"]
+    environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}", "DEBIAN_FRONTEND=noninteractive", "GITHUB_TOKEN=${var.github_token}"]
     execute_command  = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     scripts          = [
       "${path.root}/../scripts/build/install-actions-cache.sh",
@@ -144,7 +150,7 @@ provisioner "shell" {
   }
 
   provisioner "shell" {
-    environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}"]
+    environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}", "GITHUB_TOKEN=${var.github_token}"]
     execute_command  = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     scripts          = ["${path.root}/../scripts/build/install-docker.sh"]
   }
@@ -163,7 +169,7 @@ provisioner "shell" {
 
   provisioner "shell" {
     environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}", "DEBIAN_FRONTEND=noninteractive", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}"]
-    execute_command  = "/bin/sh -c '{{ .Vars }} {{ .Path }}'"
+    execute_command  = "su --login packer --command '{{ .Vars }} {{ .Path }}'"
     scripts          = ["${path.root}/../scripts/build/install-homebrew.sh"]
   }
 
@@ -193,6 +199,7 @@ provisioner "shell" {
 
   provisioner "shell" {
     environment_vars = ["IMAGE_VERSION=${var.image_version}", "INSTALLER_SCRIPT_FOLDER=${var.installer_script_folder}"]
+    execute_command  = "su --login packer --command '{{ .Vars }} {{ .Path }}'"
     inline           = ["pwsh -File ${var.image_folder}/SoftwareReport/Generate-SoftwareReport.ps1 -OutputDirectory ${var.image_folder}", "pwsh -File ${var.image_folder}/tests/RunAll-Tests.ps1 -OutputDirectory ${var.image_folder}"]
   }
 
@@ -218,11 +225,6 @@ provisioner "shell" {
     environment_vars = ["HELPER_SCRIPTS=${var.helper_script_folder}"]
     execute_command  = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
     scripts          = ["${path.root}/../scripts/build/post-build-validation.sh"]
-  }
-
-  provisioner "shell" {
-    execute_command = "sudo sh -c '{{ .Vars }} {{ .Path }}'"
-    inline          = ["sleep 30", "/usr/sbin/waagent -force -deprovision+user && export HISTSIZE=0 && sync"]
   }
 
 }
